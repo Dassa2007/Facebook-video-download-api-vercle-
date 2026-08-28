@@ -14,44 +14,34 @@ const handleFacebookDownload = async (req, res) => {
 
     try {
         let targetUrl = fbUrl.trim();
-
-        // If it's a short share link, we can use a reliable public API that handles Facebook short links automatically
-        // Let's use a robust multi-fallback approach
-        
         let videoData = null;
 
-        // Method 1: Using TikWM / FDown alternative
+        // Method 1: TikWM / FDown alternative
         try {
             const res1 = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(targetUrl)}`, { timeout: 7000 });
             if (res1.data && res1.data.code === 0 && res1.data.data) {
                 videoData = res1.data.data;
             }
-        } catch (e) {
-            // Ignore and move to next fallback
-        }
+        } catch (e) {}
 
-        // Method 2: Using RyzenDesu FBDL
+        // Method 2: RyzenDesu FBDL
         if (!videoData) {
             try {
                 const res2 = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(targetUrl)}`, { timeout: 7000 });
                 if (res2.data && res2.data.status && res2.data.data) {
                     videoData = res2.data.data;
                 }
-            } catch (e) {
-                // Ignore and move to next fallback
-            }
+            } catch (e) {}
         }
 
-        // Method 3: Using another alternative public API endpoint
+        // Method 3: Deliriuss API
         if (!videoData) {
             try {
                 const res3 = await axios.get(`https://deliriussapi-oficial.vercel.app/download/fbdl?url=${encodeURIComponent(targetUrl)}`, { timeout: 7000 });
                 if (res3.data && res3.data.status && res3.data.data) {
                     videoData = res3.data.data;
                 }
-            } catch (e) {
-                // Ignore
-            }
+            } catch (e) {}
         }
 
         if (videoData) {
@@ -69,7 +59,7 @@ const handleFacebookDownload = async (req, res) => {
                 }
             });
         } else {
-            return.status(200).json({ 
+            return res.status(200).json({ 
                 success: false, 
                 error: "Could not fetch video. Please make sure the link is a public Facebook video." 
             });
@@ -77,7 +67,7 @@ const handleFacebookDownload = async (req, res) => {
 
     } catch (error) {
         console.error('Server Error:', error.message);
-        return.status(200).json({ 
+        return res.status(200).json({ 
             success: false, 
             error: "Failed to process this link. Please try another public link." 
         });
@@ -87,7 +77,6 @@ const handleFacebookDownload = async (req, res) => {
 app.get('/api/facebook', handleFacebookDownload);
 app.post('/api/download/facebook', handleFacebookDownload);
 
-// Download Proxy to force direct file download without opening tabs
 app.get('/api/proxy-download', async (req, res) => {
     const fileUrl = req.query.url;
     const quality = req.query.q || 'hd';
