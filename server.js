@@ -10,12 +10,14 @@ app.use(express.json());
 app.post('/api/download/facebook', async (req, res) => {
     let { url } = req.body;
     if (!url) {
-        return res.status(400).json({ error: 'Please provide a valid Facebook URL.' });
+        return res.status(400).json({ success: false, error: 'Please provide a valid Facebook URL.' });
     }
 
     try {
-        // Trying a different alternative endpoint for better compatibility
-        const apiResponse = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(url)}`);
+        // Adding timeout to prevent hanging and server crashes
+        const apiResponse = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(url)}`, {
+            timeout: 8000
+        });
         
         if (apiResponse.data && apiResponse.data.code === 0 && apiResponse.data.data) {
             const vData = apiResponse.data.data;
@@ -30,8 +32,10 @@ app.post('/api/download/facebook', async (req, res) => {
             });
         }
 
-        // Fallback to another method if first one fails
-        const altResponse = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`);
+        const altResponse = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`, {
+            timeout: 8000
+        });
+        
         if (altResponse.data && altResponse.data.status && altResponse.data.data) {
             const videoData = altResponse.data.data;
             return res.status(200).json({
@@ -51,9 +55,10 @@ app.post('/api/download/facebook', async (req, res) => {
         });
 
     } catch (error) {
-        return res.status(500).json({ 
+        console.error('API Error:', error.message);
+        return res.status(200).json({ 
             success: false, 
-            error: 'Server error occurred. Please try again later.' 
+            error: 'Could not process this video link. Try another public Facebook link.' 
         });
     }
 });
@@ -71,6 +76,7 @@ app.get('/api/proxy-download', async (req, res) => {
             method: 'GET',
             url: fileUrl,
             responseType: 'stream',
+            timeout: 15000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
             }
