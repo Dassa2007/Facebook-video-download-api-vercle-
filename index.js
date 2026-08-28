@@ -1,68 +1,58 @@
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
-const cheerio = require('cheerio');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.json({ status: "API is running successfully!" });
+  res.json({ status: "Vercel FB Downloader API is running!" });
 });
 
-// Facebook Downloader Endpoint
 app.get('/api/download', async (req, res) => {
-  let videoUrl = req.query.url;
+  const videoUrl = req.query.url;
 
   if (!videoUrl) {
-    return res.status(400).json({ success: false, error: 'Please provide a Facebook video URL using ?url=' });
+    return res.status(400).json({ success: false, error: 'Please provide a video URL using ?url=' });
   }
 
   try {
-    // Handle Facebook share links if redirected
-    if (videoUrl.includes('fb.share') || videoUrl.includes('/share/')) {
-      const resp = await axios.get(videoUrl, {
-        maxRedirects: 5,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-        }
-      });
-      videoUrl = resp.request.res.responseUrl || videoUrl;
-    }
-
-    // Using general scraper logic matching your working setup
-    const response = await axios.get(videoUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9'
-      }
-    });
-
-    const $ = cheerio.load(response.data);
+    // Using a reliable public API wrapper endpoint or direct fetch logic optimized for Vercel
+    const apiUrl = `https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(videoUrl)}`;
     
-    // Extract video metadata and links
-    let hdLink = $('meta[property="og:video:secure_url"]').attr('content') || 
-                 $('meta[property="og:video"]').attr('content');
-    let title = $('meta[property="og:title"]').attr('content') || 'Facebook Video';
-    let thumbnail = $('meta[property="og:image"]').attr('content') || '';
-
-    if (!hdLink) {
-      return res.status(404).json({ success: false, error: 'Could not find video links. Make sure the post is public.' });
-    }
-
-    res.json({
-      success: true,
-      title: title,
-      thumbnail: thumbnail,
-      sd: hdLink,
-      hd: hdLink
+    const response = await axios.get(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      timeout: 10000
     });
+
+    if (response.data && (response.data.data || response.data.url)) {
+      const data = response.data.data || response.data;
+      
+      // หา links (HD / SD)
+      let hdLink = data.hd || data.url || data[0]?.url;
+      let sdLink = data.sd || data.url || data[1]?.url;
+      let title = data.title || "Facebook Video";
+      let thumbnail = data.thumbnail || "";
+
+      return res.json({
+        success: true,
+        title: title,
+        thumbnail: thumbnail,
+        sd: sdLink || hdLink,
+        hd: hdLink || sdLink
+      });
+    } else {
+      // Fallback method if primary api wrapper fails
+      return res.status(500).json({ success: false, error: 'Could not fetch video links. Try another link.' });
+    }
 
   } catch (error) {
     res.status(500).json({ 
       success: false, 
-      error: 'Failed to fetch video. Please check the URL.' 
+      error: 'Failed to process request on Vercel server.' 
     });
   }
 });
