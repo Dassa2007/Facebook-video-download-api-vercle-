@@ -7,28 +7,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 1. Facebook වීඩියෝ දත්ත ලබා ගන්න API එක
+// 1. Facebook video downloader API endpoint
 app.post('/api/download/facebook', async (req, res) => {
     const { url } = req.body;
     if (!url) {
-        return res.status(400).json({ error: 'කරුණාකර Facebook URL එකක් ලබා දෙන්න.' });
+        return res.status(400).json({ error: 'Please provide a valid Facebook URL.' });
     }
 
     try {
-        // ෆේස්බුක් ලින්ක් සඳහා ක්‍රියාත්මක වන නිදහස් API එකක් භාවිතය
-        const options = {
-            method: 'GET',
-            url: 'https://tikwm.com/api/other/fdown', // හෝ ෆේස්බුක් සඳහා සුදුසු එපොයින්ට් එකක්
-            params: { url: url }
-        };
-
-        // විකල්පයක් ලෙස RapidAPI හෝ වෙනත් නිදහස් FBDOWN සේවා API එකක් මෙහිදී සම්බන්ධ කළ හැක.
-        // පහත දැක්වෙන්නේ පොදු ක්‍රමවේදයයි:
+        // Using a reliable public downloader API for Facebook
         const response = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`);
         const data = response.data;
 
-        if (data && (data.status || data.data)) {
-            const videoData = data.data || data;
+        if (data && data.status && data.data) {
+            const videoData = data.data;
             return res.status(200).json({
                 success: true,
                 data: {
@@ -39,20 +31,20 @@ app.post('/api/download/facebook', async (req, res) => {
                 }
             });
         } else {
-            return res.status(400).json({ success: false, error: 'වීඩියෝව ලබා ගැනීමට නොහැකි විය. ලින්ක් එක නිවැරදි දැයි පරීක්ෂා කරන්න.' });
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Failed to fetch the video. Please check if the link is correct or public.' 
+            });
         }
     } catch (error) {
-        // වෙනත් විකල්ප ෆේස්බුක් API එකකට මාරුවීම සඳහා ෆෝල්බැක් එකක්
-        try {
-            const altResponse = await axios.get(`https://getmyfb.com/api/json`, { params: { url: url } });
-            // අවශ්‍ය නම් මෙහි වෙනත් ස්ට්‍රක්චර් එකක් හැසිරවිය හැක
-        } catch (err) {}
-        
-        res.status(500).json({ success: false, error: 'සර්වර් දෝෂයක් සිදු විය.' });
+        return res.status(500).json({ 
+            success: false, 
+            error: 'Server error occurred. Please try again later.' 
+        });
     }
 });
 
-// 2. Facebook වීඩියෝව කෙලින්ම ඩවුන්ලෝඩ් කරවන Proxy API එක
+// 2. Fast direct download proxy endpoint
 app.get('/api/proxy-download', async (req, res) => {
     const fileUrl = req.query.url;
     const quality = req.query.q || 'hd';
