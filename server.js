@@ -7,25 +7,6 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Helper function to resolve shortened/share URLs
-async function expandUrl(url) {
-    try {
-        if (url.includes('fb.share') || url.includes('/share/')) {
-            const response = await axios.get(url, {
-                maxRedirects: 5,
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                }
-            });
-            return response.request.res.responseUrl || url;
-        }
-    } catch (error) {
-        // If expansion fails, return the original URL
-    }
-    return url;
-}
-
-// 1. Facebook video downloader API endpoint
 app.post('/api/download/facebook', async (req, res) => {
     let { url } = req.body;
     if (!url) {
@@ -33,14 +14,26 @@ app.post('/api/download/facebook', async (req, res) => {
     }
 
     try {
-        // Expand the URL if it's a short share link
-        url = await expandUrl(url);
+        // Trying a different alternative endpoint for better compatibility
+        const apiResponse = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(url)}`);
+        
+        if (apiResponse.data && apiResponse.data.code === 0 && apiResponse.data.data) {
+            const vData = apiResponse.data.data;
+            return res.status(200).json({
+                success: true,
+                data: {
+                    title: vData.title || 'Facebook Video',
+                    cover: vData.thumbnail || '',
+                    videoHD: vData.hd || vData.sd || '',
+                    videoSD: vData.sd || vData.hd || ''
+                }
+            });
+        }
 
-        const response = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`);
-        const data = response.data;
-
-        if (data && data.status && data.data) {
-            const videoData = data.data;
+        // Fallback to another method if first one fails
+        const altResponse = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`);
+        if (altResponse.data && altResponse.data.status && altResponse.data.data) {
+            const videoData = altResponse.data.data;
             return res.status(200).json({
                 success: true,
                 data: {
@@ -50,12 +43,13 @@ app.post('/api/download/facebook', async (req, res) => {
                     videoSD: videoData.sd || videoData.hd || ''
                 }
             });
-        } else {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Failed to fetch the video. Please check if the link is correct or public.' 
-            });
         }
+
+        return res.status(400).json({ 
+            success: false, 
+            error: 'Failed to fetch the video. Please check if the link is correct or public.' 
+        });
+
     } catch (error) {
         return res.status(500).json({ 
             success: false, 
@@ -64,7 +58,6 @@ app.post('/api/download/facebook', async (req, res) => {
     }
 });
 
-// 2. Fast direct download proxy endpoint
 app.get('/api/proxy-download', async (req, res) => {
     const fileUrl = req.query.url;
     const quality = req.query.q || 'hd';
