@@ -6,6 +6,31 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Function to resolve short Facebook URLs to actual video URLs
+async function getRealFacebookUrl(shortUrl) {
+    try {
+        if (!shortUrl.includes('/share/')) {
+            return shortUrl;
+        }
+        const response = await axios.get(shortUrl, {
+            maxRedirects: 5,
+            timeout: 6000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1'
+            }
+        });
+        if (response.request && response.request.res && response.request.res.responseUrl) {
+            return response.request.res.responseUrl;
+        }
+        return response.config.url || shortUrl;
+    } catch (error) {
+        if (error.response && error.response.headers && error.response.headers.location) {
+            return error.response.headers.location;
+        }
+        return shortUrl;
+    }
+}
+
 const handleFacebookDownload = async (req, res) => {
     let fbUrl = req.query.url || (req.body && req.body.url);
     if (!fbUrl) {
@@ -13,33 +38,22 @@ const handleFacebookDownload = async (req, res) => {
     }
 
     try {
-        let targetUrl = fbUrl.trim();
+        let cleanUrl = await getRealFacebookUrl(fbUrl.trim());
         let videoData = null;
 
-        // Try API 1 (Cobalt / TikWM alternative)
+        // Try API to fetch video data using the resolved clean URL
         try {
-            const res1 = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(targetUrl)}`, { timeout: 6000 });
-            if (res1.data && res1.data.code === 0 && res1.data.data) {
-                videoData = res1.data.data;
+            const apiRes = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(cleanUrl)}`, { timeout: 7000 });
+            if (apiRes.data && apiRes.data.code === 0 && apiRes.data.data) {
+                videoData = apiRes.data.data;
             }
         } catch (e) {}
 
-        // Try API 2 (RyzenDesu API) if first one fails
         if (!videoData) {
             try {
-                const res2 = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(targetUrl)}`, { timeout: 6000 });
-                if (res2.data && res2.data.status && res2.data.data) {
-                    videoData = res2.data.data;
-                }
-            } catch (e) {}
-        }
-
-        // Try API 3 (SaveFrom / Public alternative fallback)
-        if (!videoData) {
-            try {
-                const res3 = await axios.get(`https://archive-ui.zipha.workers.dev/facebook?url=${encodeURIComponent(targetUrl)}`, { timeout: 6000 });
-                if (res3.data && res3.data.result) {
-                    videoData = res3.data.result;
+                const apiRes2 = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(cleanUrl)}`, { timeout: 7000 });
+                if (apiRes2.data && apiRes2.data.status && apiRes2.data.data) {
+                    videoData = apiRes2.data.data;
                 }
             } catch (e) {}
         }
@@ -60,31 +74,16 @@ const handleFacebookDownload = async (req, res) => {
                 }
             });
         } else {
-            // Ultimate fallback: If APIs fail, pass raw link directly to frontend so user can download/view manually without crashing
             return res.status(200).json({
-                success: true,
-                data: {
-                    title: "Facebook Video",
-                    cover: ""
-                },
-                result: {
-                    hd: targetUrl,
-                    sd: targetUrl
-                }
+                success: false,
+                error: "Could not extract video. Make sure the post is public."
             });
         }
 
     } catch (error) {
-        return res.status(200).json({
-            success: true,
-            data: {
-                title: "Facebook Video",
-                cover: ""
-            },
-            result: {
-                hd: fbUrl,
-                sd: fbUrl
-            }
+        return res.status(500).json({
+            success: false,
+            error: "Server processing error."
         });
     }
 };
