@@ -7,15 +7,35 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Helper function to resolve shortened/share URLs
+async function expandUrl(url) {
+    try {
+        if (url.includes('fb.share') || url.includes('/share/')) {
+            const response = await axios.get(url, {
+                maxRedirects: 5,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                }
+            });
+            return response.request.res.responseUrl || url;
+        }
+    } catch (error) {
+        // If expansion fails, return the original URL
+    }
+    return url;
+}
+
 // 1. Facebook video downloader API endpoint
 app.post('/api/download/facebook', async (req, res) => {
-    const { url } = req.body;
+    let { url } = req.body;
     if (!url) {
         return res.status(400).json({ error: 'Please provide a valid Facebook URL.' });
     }
 
     try {
-        // Using a reliable public downloader API for Facebook
+        // Expand the URL if it's a short share link
+        url = await expandUrl(url);
+
         const response = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`);
         const data = response.data;
 
