@@ -7,6 +7,37 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Function to automatically expand short/share Facebook links
+async function resolveFacebookUrl(inputUrl) {
+    try {
+        if (!inputUrl.includes('/share/')) {
+            return inputUrl;
+        }
+
+        // Send request with redirect tracking enabled
+        const response = await axios.get(inputUrl, {
+            maxRedirects: 10,
+            timeout: 8000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
+            }
+        });
+
+        // Return final redirected URL if available
+        if (response.request && response.request.res && response.request.res.responseUrl) {
+            return response.request.res.responseUrl;
+        }
+        return response.config.url || inputUrl;
+    } catch (error) {
+        // If redirection throws an error due to restrictions, try alternative expansion
+        if (error.response && error.response.headers && error.response.headers.location) {
+            return error.response.headers.location;
+        }
+        return inputUrl; // Fallback to original if expansion fails
+    }
+}
+
 app.post('/api/download/facebook', async (req, res) => {
     let { url } = req.body;
     if (!url) {
@@ -14,8 +45,11 @@ app.post('/api/download/facebook', async (req, res) => {
     }
 
     try {
-        // Adding timeout to prevent hanging and server crashes
-        const apiResponse = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(url)}`, {
+        // Step 1: Expand short share link to full link
+        let expandedUrl = await resolveFacebookUrl(url.trim());
+
+        // Step 2: Try fetching with the resolved/original URL
+        const apiResponse = await axios.get(`https://tikwm.com/api/other/fdown?url=${encodeURIComponent(expandedUrl)}`, {
             timeout: 8000
         });
         
@@ -32,7 +66,8 @@ app.post('/api/download/facebook', async (req, res) => {
             });
         }
 
-        const altResponse = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(url)}`, {
+        // Alternative fallback API
+        const altResponse = await axios.get(`https://api.ryzendesu.vip/api/downloader/fbdl?url=${encodeURIComponent(expandedUrl)}`, {
             timeout: 8000
         });
         
